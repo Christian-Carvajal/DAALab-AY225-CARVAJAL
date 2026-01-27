@@ -171,9 +171,13 @@ class SortingApp:
                 self.original_data = [int(line.strip()) for line in f if line.strip().lstrip('-').isdigit()]
             self.info_label.config(text=f"Loaded {len(self.original_data)} items")
             self.display_data(self.original_data)
+        except FileNotFoundError:
+             self.info_label.config(text="File not found")
+             messagebox.showerror("Error", f"Dataset file not found at:\n{self.filename}\n\nPlease ensure 'dataset.txt' is in the same directory as the script.")
+             self.original_data = []
         except Exception as e:
             self.info_label.config(text="Error loading file")
-            messagebox.showerror("Error", str(e))
+            messagebox.showerror("Error", f"Error loading file: {str(e)}")
             self.original_data = []
 
     def refresh_canvas(self, event=None):

@@ -1,16 +1,3 @@
-"""
-Sorting Algorithm Stress Test - Comprehensive Benchmarking Tool
-================================================================
-A lightweight GUI application to benchmark sorting algorithms on large datasets.
-
-Implements from scratch:
-- Bubble Sort: O(n²)
-- Insertion Sort: O(n²)  
-- Merge Sort: O(n log n)
-
-Author: Sorting Benchmark Tool
-"""
-
 import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext
 import csv

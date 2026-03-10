@@ -1,5 +1,10 @@
 # Midterm Lab Work 1 - TSP Resource Optimizer
 
+## Group Members
+- **CARVAJAL, Christian Ezekiel L.**
+- **CHAVEZ, Floyd**
+- **SARSALIJO, John Miko**
+
 ## Description
 This program is a Python-based graphical application that solves the Traveling Salesperson Problem (TSP). It calculates the optimal (shortest) continuous path to visit all given nodes and return to the starting point, optimizing for three distinct metrics based on the provided `dataset.csv`:
 - **Distance (D)**
@@ -32,3 +37,5 @@ Upon execution, a clean, interactive GUI window will pop up featuring:
 2. **Visual Network Graph**: An automated node map showing all possible routes. The chosen optimal path will be visibly highlighted with thick **red curved arrows** indicating the exact direction of travel, while non-optimal connections fade cleanly into a gray background.
 3. **Explicit Text Readout**: Positioned at the bottom of the window, clearly printing out the precise consecutive optimal sequence (e.g., `1 ➔ 2 ➔ 5 ➔ 4 ➔ 3 ➔ 6 ➔ 1`) along with the exact final calculated minimum cost.
 4. **Multiple Valid Routes Support**: If multiple distinct routes yield the exact same minimum cost, the program will detect this. For example, while Distance and Fuel both evaluate to 1 unique answer, **Time (T)** uncovers exactly **2 distinct optimal routes** that tie for the lowest cost (130.00). You can click the `Next Route` button at the top to toggle and visualize both correct answers immediately!
+
+

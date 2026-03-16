@@ -15,13 +15,20 @@ Designed with a professional User-Centered Design (UCD) approach, the app featur
 - **Dynamic Contextual Labels**: Visual edges update seamlessly to display their respective units�showing km for distance, mins for time, and L for fuel consumption.
 - **Fail-Safe Data Ingestion**: Correctly processes .csv data dynamically using absolute os.path resolutions, ensuring zero execution failures across different Windows CLI boundaries.
 
-## Algorithm Used
-### Dijkstra's Algorithm
+## Brief Report: Approach and Algorithm
+
+### Approach & Data Structures
+The application takes a User-Centered Design (UCD) approach to solving minimum-cost graph traversal problems, simulating a real-world local geography (cities in Cavite) mapping network edges based on practical travel metrics. We implemented this using pure Python standard libraries to avoid heavy dependencies:
+- **Adjacency List (Dictionaries & Lists)**: The dataset is parsed using the `csv` module into a graph represented as an adjacency list (`graph[node] = [(neighbor, {distance, time, fuel}), ...]`). This allows efficient $O(1)$ neighbor lookups and is optimally space-efficient for geographic graphs.
+- **Priority Queue (`heapq`)**: Essential for priority-based traversal, guaranteeing that the next node evaluated is always the one with the currently lowest cumulative cost.
+- **Reactive UI (`tkinter`)**: An event-driven GUI that instantly recalculates paths and redraws Canvas objects whenever a dropdown or radio button value changes.
+
+### Algorithm Used: Dijkstra's Algorithm
 Finding the most efficient traversal across a weighted graph relies on a customized implementation of **Dijkstra's Algorithm**. 
-- A **Priority Queue** (heapq) efficiently fetches the unvisited node holding the lowest cumulative cost.
-- The algorithm incrementally explores outward from the origin node, assessing cumulative weights, and discarding longer, inferior routes.
-- Once the destination is locked, the algorithm traces backwards to form the optimal path.
-- *Bonus Tracking*: Independent of the prioritized weight constraint (e.g., shortest Distance), the system independently tabulates and displays the total Time and Fuel taken by that exact path.
+- **Time Complexity:** Operates at **$O((V + E) \log V)$** (where $V$ is vertices and $E$ is edges) due to the use of Python's binary heap (`heapq`). This ensures lightning-fast execution capable of matching the user's real-time interface clicks.
+- **State Tracking**: The priority queue stores states efficiently as `(cost, current_node, path_so_far)`. This organically traces and builds the route history without requiring a massive parent-pointer array.
+- **Execution Flow**: The algorithm incrementally explores outward from the origin node. It pops the lowest-cost node, checks if it has been marked `visited`, and iterates through its neighbors. It adds the specific edge's weight (dynamically switching between Distance, Time, or Fuel based on the UI `weight_key`) to the cumulative cost and pushes it back into the heap.
+- **Bonus Extrapolation Tracking**: Once the algorithm successfully locks onto the destination node, it traverses the finalized path one last time to independently tabulate and report the parallel metrics (e.g. calculating total *Time* and *Fuel* even if prioritized blindly for *Distance*).
 
 ## Code Architecture (MidtermLab2-Carvajal.py)
 1. **load_graph()**: Parses dataset.csv into a bidirectional adjacency list natively, converting edge capacities to precision floats.

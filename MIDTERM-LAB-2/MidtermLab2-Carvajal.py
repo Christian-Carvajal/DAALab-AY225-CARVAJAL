@@ -213,6 +213,7 @@ class AppUI:
         self.root = root
         self.graph = graph
         self.nodes = nodes
+        self._first_path_run = True
         
         # Configure fonts
         self.font_h1 = ('Segoe UI', 18, 'bold')
@@ -222,6 +223,42 @@ class AppUI:
         self.font_value = ('Segoe UI', 14, 'bold')
 
         self.setup_ui()
+
+    def show_custom_dialog(self, title, message, show_maximize=False):
+        dlg = tk.Toplevel(self.root)
+        dlg.title(title)
+        dlg.geometry("450x200")
+        dlg.configure(bg=BG_CARD)
+        dlg.transient(self.root)
+        dlg.grab_set()
+        
+        # Center the dialog
+        dlg.update_idletasks()
+        x = self.root.winfo_rootx() + (self.root.winfo_width() // 2) - 225
+        y = self.root.winfo_rooty() + (self.root.winfo_height() // 2) - 100
+        dlg.geometry(f"+{x}+{y}")
+        
+        lbl_title = tk.Label(dlg, text=title, bg=BG_CARD, fg=ACCENT_PRIMARY, font=self.font_h2)
+        lbl_title.pack(pady=(20, 10))
+        
+        lbl_msg = tk.Label(dlg, text=message, bg=BG_CARD, fg=FG_PRIMARY, font=self.font_p, wraplength=400, justify='center')
+        lbl_msg.pack(pady=(0, 20), padx=20)
+        
+        btn_frame = tk.Frame(dlg, bg=BG_CARD)
+        btn_frame.pack(fill='x', pady=10)
+        
+        if show_maximize:
+            def do_maximize():
+                self.root.state('zoomed')
+                dlg.destroy()
+            btn_max = tk.Button(btn_frame, text="Maximize Window", command=do_maximize, bg=ACCENT_PRIMARY, fg=BG_MAIN, font=self.font_p, relief='flat', cursor='hand2', padx=10, pady=5)
+            btn_max.pack(side='left', expand=True, padx=10)
+            
+            btn_dismiss = tk.Button(btn_frame, text="Dismiss", command=dlg.destroy, bg=BTN_RESET_BG, fg=FG_PRIMARY, font=self.font_p, relief='flat', cursor='hand2', padx=10, pady=5)
+            btn_dismiss.pack(side='right', expand=True, padx=10)
+        else:
+            btn_ok = tk.Button(btn_frame, text="OK", command=dlg.destroy, bg=BTN_RESET_BG, fg=FG_PRIMARY, font=self.font_p, relief='flat', cursor='hand2', padx=20, pady=5)
+            btn_ok.pack()
 
     def create_card(self, parent, title, row, col):
         card = tk.Frame(parent, bg=BG_CARD, padx=12, pady=8, bd=0)
@@ -313,6 +350,20 @@ class AppUI:
         btn_frm = tk.Frame(form_frm, bg=BG_SIDEBAR)
         btn_frm.pack(fill='x', pady=10)
 
+        analyze_btn = tk.Button(btn_frm, text="Run Global Hub Analysis", command=self.show_analysis,
+                              bg=BTN_RESET_BG, fg=FG_PRIMARY, font=self.font_p,
+                              relief='flat', pady=6, cursor='hand2', activebackground=BTN_RESET_HOV)
+        analyze_btn.pack(fill='x', pady=(0, 10))
+        analyze_btn.bind("<Enter>", lambda e: on_enter(e, analyze_btn, BTN_RESET_HOV))
+        analyze_btn.bind("<Leave>", lambda e: on_leave(e, analyze_btn, BTN_RESET_BG))
+
+        stats_btn = tk.Button(btn_frm, text="View Algorithmic Stats", command=self.show_stats,
+                              bg=BTN_RESET_BG, fg=FG_PRIMARY, font=self.font_p,
+                              relief='flat', pady=6, cursor='hand2', activebackground=BTN_RESET_HOV)
+        stats_btn.pack(fill='x', pady=(0, 10))
+        stats_btn.bind("<Enter>", lambda e: on_enter(e, stats_btn, BTN_RESET_HOV))
+        stats_btn.bind("<Leave>", lambda e: on_leave(e, stats_btn, BTN_RESET_BG))
+
         reset_btn = tk.Button(btn_frm, text="Reset Map", command=self.reset_map,
                               bg=BTN_RESET_BG, fg=FG_PRIMARY, font=self.font_p,
                               relief='flat', pady=6, cursor='hand2', activebackground=BTN_RESET_HOV)
@@ -336,17 +387,39 @@ class AppUI:
         self.lbl_time = self.create_card(metrics_grid, "Est. Time", 0, 1)
         self.lbl_fuel = self.create_card(metrics_grid, "Fuel Usage", 1, 0)
         
-        self.path_card = tk.Frame(metrics_grid, bg=BG_CARD, padx=12, pady=8, bd=0)
-        self.path_card.grid(row=1, column=1, sticky='nsew', padx=4, pady=4)
+        # Span the empty space for cleaner look if needed, but pulling Path Summary out is better
+        placeholder = tk.Frame(metrics_grid, bg=BG_SIDEBAR)
+        placeholder.grid(row=1, column=1, sticky='nsew')
+        
+        # Path Summary (Full width below metrics grid)
+        self.path_card = tk.Frame(self.res_frm, bg=BG_CARD, padx=12, pady=8, bd=0)
+        self.path_card.pack(fill='both', expand=True, pady=(10, 0), padx=4)
+        
         tk.Label(self.path_card, text="Path Summary", bg=BG_CARD, fg=FG_SECONDARY, font=self.font_small).pack(anchor='w')
-        self.lbl_path = tk.Label(self.path_card, text="-", bg=BG_CARD, fg=FG_PRIMARY, font=('Segoe UI', 9), wraplength=100, justify='left')
-        self.lbl_path.pack(anchor='w', pady=(2,0))
+        
+        # Scrollable Text widget frame
+        path_text_frame = tk.Frame(self.path_card, bg=BG_CARD)
+        path_text_frame.pack(fill='both', expand=True, pady=(2,0))
+        
+        self.lbl_path = tk.Text(path_text_frame, bg=BG_CARD, fg=FG_PRIMARY, font=('Segoe UI', 9), bd=0, height=4, wrap='word')
+        
+        # Add actual scrollbar so it can be dragged
+        path_scroll = ttk.Scrollbar(path_text_frame, orient='vertical', command=self.lbl_path.yview)
+        self.lbl_path.configure(yscrollcommand=path_scroll.set)
+        
+        self.lbl_path.pack(side='left', fill='both', expand=True)
+        path_scroll.pack(side='right', fill='y')
+        
+        self.lbl_path.insert('1.0', "-")
+        self.lbl_path.config(state='disabled')
+        
+        tk.Label(self.sidebar, text="(Maximize window for best visibility)", bg=BG_SIDEBAR, fg=FG_SECONDARY, font=('Segoe UI', 8, 'italic')).pack(side='bottom', pady=(0, 10))
 
     def on_dropdown_change(self):
         # Automatically recalculate path when a new city is selected from the dropdown
         if self.frm_var.get() in self.nodes and self.to_var.get() in self.nodes:
             if self.frm_var.get() == self.to_var.get():
-                messagebox.showwarning("Same Node", "Origin and Destination cannot be the same. Please select different nodes.", parent=self.root)
+                self.show_custom_dialog("Invalid Selection", "Origin and Destination cannot be the same.\nPlease select different nodes.")
                 self.reset_map()
             else:
                 self.find_path()
@@ -362,12 +435,162 @@ class AppUI:
             # Just visually update the graph lines even if no route is planned
             draw_map(self.canvas, self.graph, self.nodes, active_metric=self.opt_var.get())
 
+    def show_analysis(self):
+        win = tk.Toplevel(self.root)
+        win.title("Network Hub Optimization Report")
+        # Ensure window is large and let it resize naturally without text squishing.
+        win.state('zoomed')
+        win.geometry("1500x900")
+        win.configure(bg=BG_MAIN)
+        
+        # Focus strategy
+        win.transient(self.root)
+        win.grab_set()
+        
+        # Header
+        hdr = tk.Frame(win, bg=BG_SIDEBAR, pady=15)
+        hdr.pack(fill='x')
+        
+        btn_back = tk.Button(hdr, text="← Return to Map", command=win.destroy, bg=BTN_RESET_BG, fg=FG_PRIMARY, relief='flat', padx=10, cursor='hand2')
+        btn_back.pack(side='left', padx=15)
+        
+        tk.Label(hdr, text="📊 Comprehensive All-Pairs Algorithmic Analysis", 
+                 font=('Segoe UI', 16, 'bold'), bg=BG_SIDEBAR, fg=FG_PRIMARY).pack(side='left', fill='x', expand=True)
+
+        # Compute data
+        metrics = [('distance', 'Optimal Distance', 'km'), ('time', 'Optimal Time', 'mins'), ('fuel', 'Optimal Fuel', 'L')]
+        results = {}
+        for m_key, m_name, m_unit in metrics:
+            node_totals = []
+            for start in self.nodes:
+                total_cost = 0
+                details = []
+                for dest in self.nodes:
+                    if start == dest: continue
+                    cost, path, _ = dijkstra(self.graph, start, dest, m_key)
+                    if cost is not None:
+                        total_cost += cost
+                        details.append((dest, cost, path))
+                node_totals.append((total_cost, start, details))
+            node_totals.sort(key=lambda x: x[0])
+            results[m_key] = node_totals
+
+        # Layout
+        container = tk.Frame(win, bg=BG_MAIN)
+        container.pack(fill='both', expand=True, padx=20, pady=20)
+        
+        for i, (m_key, m_name, m_unit) in enumerate(metrics):
+            container.columnconfigure(i, weight=1)
+            card = tk.Frame(container, bg=BG_SIDEBAR, bd=0)
+            card.grid(row=0, column=i, sticky='nsew', padx=10)
+            
+            best_val, best_node, best_details = results[m_key][0]
+            
+            tk.Label(card, text=f"Top Hub ({m_name})", font=('Segoe UI', 12, 'bold'), bg=BG_SIDEBAR, fg=FG_SECONDARY).pack(pady=(15, 0))
+            tk.Label(card, text=f"Total: {best_val:.2f} {m_unit}", font=('Segoe UI', 16, 'bold'), bg=BG_SIDEBAR, fg=ACCENT_PRIMARY).pack(pady=(0, 15))
+            
+            detail_frm = tk.Frame(card, bg=BG_CARD, padx=15, pady=15)
+            detail_frm.pack(fill='both', expand=True, padx=15, pady=(0, 15))
+            
+            tk.Label(detail_frm, text="[ ALGORITHM VALIDATION ]", font=('Courier New', 9, 'bold'), bg=BG_CARD, fg=FG_SECONDARY, anchor='w').pack(fill='x', pady=(0, 10))
+            tk.Label(detail_frm, text=f"Aggregate {m_key} sums per vertex:", font=('Segoe UI', 9, 'italic'), bg=BG_CARD, fg=FG_PRIMARY, anchor='w').pack(fill='x')
+            
+            summary_canvas = tk.Canvas(detail_frm, bg=BG_CARD, highlightthickness=0, height=140)
+            summary_canvas.pack(fill='x', pady=(5,5))
+            
+            y_pos = 5
+            for rank, (val, node, _) in enumerate(results[m_key]):
+                prefix = "► " if rank == 0 else "  "
+                color = ACCENT_PRIMARY if rank == 0 else FG_PRIMARY
+                bold = 'bold' if rank == 0 else 'normal'
+                summary_canvas.create_text(5, y_pos, text=f"{prefix}{node:<10}  {val:.2f}", anchor='nw', font=('Consolas', 9, bold), fill=color)
+                y_pos += 16
+                
+            tk.Label(detail_frm, text=f"\n[ OPTIMAL TARGET ]\nBest Origin: {best_node} strictly dominates.", font=('Segoe UI', 9, 'bold'), bg=BG_CARD, fg=ACCENT_PRIMARY, anchor='w', justify='left', wraplength=350).pack(fill='x', pady=(5,10))
+            
+            tk.Label(detail_frm, text=f"ROUTING STRUCTURE (From {best_node}):", font=('Segoe UI', 8, 'bold'), bg=BG_CARD, fg=FG_SECONDARY, anchor='w').pack(fill='x', pady=(0,5))
+            
+            # Canvas with scrollbar for path details
+            canvas = tk.Canvas(detail_frm, bg=BG_CARD, highlightthickness=0)
+            scrollbar = ttk.Scrollbar(detail_frm, orient="vertical", command=canvas.yview)
+            scrollable_frame = tk.Frame(canvas, bg=BG_CARD)
+
+            scrollable_frame.bind(
+                "<Configure>",
+                lambda e, canvas=canvas: canvas.configure(scrollregion=canvas.bbox("all"))
+            )
+
+            # Use a slightly wider window to prevent cutoff
+            canvas.create_window((0, 0), window=scrollable_frame, anchor="nw", width=550)
+            canvas.configure(yscrollcommand=scrollbar.set)
+            
+            canvas.pack(side="left", fill="both", expand=True)
+            scrollbar.pack(side="right", fill="y")
+            
+            for dest, cost, path in sorted(best_details, key=lambda x: x[0]):
+                path_str = " ➔ ".join(path)
+                # Keep formatting flat without forcing Message into an unnatural wrap
+                desc = f"Target {dest:<8} | Cost: {cost:.1f}\n   Path: {path_str}"
+                tk.Label(scrollable_frame, text=desc, font=('Consolas', 9), bg=BG_CARD, fg=FG_PRIMARY, anchor='w', justify='left').pack(fill='x', pady=(2, 6))
+
+    def show_stats(self):
+        win = tk.Toplevel(self.root)
+        win.title("Algorithmic Properties & Memory Data")
+        win.geometry("750x750")
+        win.configure(bg=BG_MAIN)
+        win.transient(self.root)
+        win.grab_set()
+
+        # Title
+        tk.Label(win, text="⚙️ Graph Data & Algorithm Properties", font=('Segoe UI', 16, 'bold'), bg=BG_MAIN, fg=FG_PRIMARY).pack(pady=20)
+        
+        info_frame = tk.Frame(win, bg=BG_SIDEBAR, padx=20, pady=20)
+        info_frame.pack(fill='x', padx=20)
+        
+        num_v = len(self.nodes)
+        num_e = sum(len(v) for v in self.graph.values()) // 2
+        
+        stats_text = (
+            f"GRAPH PROPERTIES:\n"
+            f" ➔ Order (Vertices, V): {num_v}\n"
+            f" ➔ Size (Edges, E): {num_e}\n"
+            f" ➔ Graph Type: Undirected, Positively Weighted\n"
+            f" ➔ Data Structure Used: Adjacency List (O(1) neighbor lookups)\n\n"
+            f"DIJKSTRA'S ALGORITHM DATA:\n"
+            f" ➔ Queue Mechanism: Priority Queue (Python heapq Module)\n"
+            f" ➔ Time Complexity: O((V + E) log V) via Binary Heap\n"
+            f" ➔ Space Complexity: O(V) array visited tracking + O(V) Priority Queue\n"
+            f" ➔ Negative Weights Support: None (Valid, as geography properties >= 0)\n"
+        )
+        
+        tk.Label(info_frame, text=stats_text, font=('Consolas', 10), bg=BG_SIDEBAR, fg=FG_SECONDARY, justify='left', anchor='w').pack(fill='x')
+        
+        tk.Label(win, text="[ RAW ADJACENCY LIST IN MEMORY ]", font=('Courier New', 10, 'bold'), bg=BG_MAIN, fg=ACCENT_PRIMARY, anchor='w').pack(fill='x', padx=20, pady=(15, 5))
+        
+        text_area = tk.Text(win, bg=BG_CARD, fg=FG_PRIMARY, font=('Consolas', 9), bd=0, padx=15, pady=15)
+        text_area.pack(fill='both', expand=True, padx=20, pady=(0,20))
+        
+        dump_str = ""
+        for n in sorted(self.graph.keys()):
+            dump_str += f"{n}:\n"
+            for nb, attrs in sorted(self.graph[n], key=lambda x: x[0]):
+                dump_str += f"  ➔ {nb:<10} [Dist: {attrs['distance']}km | Time: {attrs['time']}m | Fuel: {attrs['fuel']}L]\n"
+            dump_str += "\n"
+            
+        text_area.insert('1.0', dump_str)
+        text_area.config(state='disabled')
+
     def reset_map(self):
         draw_map(self.canvas, self.graph, self.nodes, active_metric=self.opt_var.get())
         self.lbl_dist.config(text="-")
         self.lbl_time.config(text="-")
         self.lbl_fuel.config(text="-")
-        self.lbl_path.config(text="-")
+        
+        self.lbl_path.config(state='normal')
+        self.lbl_path.delete('1.0', tk.END)
+        self.lbl_path.insert('1.0', "-")
+        self.lbl_path.config(state='disabled')
+        
         self.frm_var.set("Select Origin...")
         self.to_var.set("Select Destination...")
 
@@ -385,7 +608,7 @@ class AppUI:
         cost, path, totals = dijkstra(self.graph, start, end, key)
 
         if not path:
-            messagebox.showinfo("No Route", f"No accessible path found from {start} to {end}.", parent=self.root)
+            self.show_custom_dialog("No Route", f"No accessible path found from {start} to {end}.")
             self.reset_map()
             return
 
@@ -396,9 +619,36 @@ class AppUI:
         self.lbl_time.config(text=f"{totals['time']:.0f} min")
         self.lbl_fuel.config(text=f"{totals['fuel']:.1f} L")
         
-        # Format path
-        path_str = " → ".join(path)
-        self.lbl_path.config(text=path_str)
+        # Format path with detailed step-by-step segment weights
+        path_parts = []
+        for i in range(len(path) - 1):
+            a, b = path[i], path[i + 1]
+            seg_val = 0
+            for (nb, attrs) in self.graph.get(a, []):
+                if nb == b:
+                    seg_val = attrs[key]
+                    break
+            unit_str = "km" if key == "distance" else ("m" if key == "time" else "L")
+            path_parts.append(f"{a} ─({seg_val:.1f}{unit_str})➔")
+            
+        path_parts.append(path[-1])
+        path_str = " ".join(path_parts)
+        
+        self.lbl_path.config(state='normal')
+        self.lbl_path.delete('1.0', tk.END)
+        self.lbl_path.insert('1.0', path_str)
+        self.lbl_path.config(state='disabled')
+        
+        # Check if the user should be prompted to maximize for better viewing
+        if getattr(self, '_first_path_run', True):
+            self._first_path_run = False
+            # If not vertically zoomed/maximized
+            if self.root.state() != 'zoomed':
+                self.show_custom_dialog(
+                    "Display Recommendation",
+                    "For full path details, edge visibility, and the best immersive experience, it is highly recommended to view this application in Full Screen.",
+                    show_maximize=True
+                )
 
 
 def build_gui(graph, nodes):

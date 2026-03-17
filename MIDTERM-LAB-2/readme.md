@@ -30,6 +30,11 @@ Finding the most efficient traversal across a weighted graph relies on a customi
 - **Execution Flow**: The algorithm incrementally explores outward from the origin node. It pops the lowest-cost node, checks if it has been marked `visited`, and iterates through its neighbors. It adds the specific edge's weight (dynamically switching between Distance, Time, or Fuel based on the UI `weight_key`) to the cumulative cost and pushes it back into the heap.
 - **Bonus Extrapolation Tracking**: Once the algorithm successfully locks onto the destination node, it traverses the finalized path one last time to independently tabulate and report the parallel metrics (e.g. calculating total *Time* and *Fuel* even if prioritized blindly for *Distance*).
 
+### All-Pairs Analysis (Best Starting City)
+To answer the question "Which city is the best overall starting location to visit all networks?", we implemented a dynamic **All-Pairs Shortest Path Analysis** by repeatedly executing our optimized Dijkstra's algorithm. 
+- The system iterates over every single node as an `origin`, calculating the shortest path to *all* other individual nodes in the dataset based on each specific metric (`Distance`, `Time`, and `Fuel`).
+- It automatically tabulates the comprehensive sum of weights required to traverse from one specific source to every other destination, eliminating manual checking and pre-emptively presenting all required algorithmic data to the user without external calculations.
+
 ## Code Architecture (MidtermLab2-Carvajal.py)
 1. **load_graph()**: Parses dataset.csv into a bidirectional adjacency list natively, converting edge capacities to precision floats.
 2. **dijkstra()**: Employs structural graph theory tracking current cost, history, and previously visited vertices.

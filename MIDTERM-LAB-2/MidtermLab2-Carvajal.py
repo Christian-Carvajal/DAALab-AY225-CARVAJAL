@@ -311,7 +311,18 @@ class AppUI:
         self.root.option_add('*TCombobox*Listbox.foreground', 'white')
         self.root.option_add('*TCombobox*Listbox.selectBackground', ACCENT_HOVER)
         self.root.option_add('*TCombobox*Listbox.selectForeground', 'white')
-
+        
+        # Scrollbar Style (Silver/Grey track)
+        style.configure('Vertical.TScrollbar',
+                        background='#A2A2B5',     # Silver thumb
+                        darkcolor='#A2A2B5',
+                        lightcolor='#A2A2B5',
+                        troughcolor=BG_MAIN,      # Track matches background
+                        bordercolor=BG_MAIN,
+                        arrowcolor=ACCENT_PRIMARY) # Cyan arrows
+        style.map('Vertical.TScrollbar',
+                  background=[('active', '#FFFFFF')]) # Bright white when hovered
+        
         # Origin
         tk.Label(form_frm, text="Origin Node", bg=BG_SIDEBAR, fg=FG_PRIMARY, font=self.font_small).pack(anchor='w')
         self.frm_var = tk.StringVar()
@@ -363,6 +374,13 @@ class AppUI:
         stats_btn.pack(fill='x', pady=(0, 10))
         stats_btn.bind("<Enter>", lambda e: on_enter(e, stats_btn, BTN_RESET_HOV))
         stats_btn.bind("<Leave>", lambda e: on_leave(e, stats_btn, BTN_RESET_BG))
+
+        tech_btn = tk.Button(btn_frm, text="Technical", command=self.show_tech_defense,
+                              bg=BTN_RESET_BG, fg=FG_PRIMARY, font=self.font_p,
+                              relief='flat', pady=6, cursor='hand2', activebackground=BTN_RESET_HOV)
+        tech_btn.pack(fill='x', pady=(0, 10))
+        tech_btn.bind("<Enter>", lambda e: on_enter(e, tech_btn, BTN_RESET_HOV))
+        tech_btn.bind("<Leave>", lambda e: on_leave(e, tech_btn, BTN_RESET_BG))
 
         reset_btn = tk.Button(btn_frm, text="Reset Map", command=self.reset_map,
                               bg=BTN_RESET_BG, fg=FG_PRIMARY, font=self.font_p,
@@ -579,6 +597,203 @@ class AppUI:
             
         text_area.insert('1.0', dump_str)
         text_area.config(state='disabled')
+
+    def show_tech_defense(self):
+        win = tk.Toplevel(self.root)
+        win.title("Technical Defense & Source Validation")
+        win.state('zoomed')
+        win.geometry("1500x900")
+        win.configure(bg=BG_MAIN)
+        win.transient(self.root)
+        win.grab_set()
+        
+        hdr = tk.Frame(win, bg=BG_SIDEBAR, pady=15)
+        hdr.pack(fill='x')
+        btn_back = tk.Button(hdr, text="← Return to Map", command=win.destroy, bg=BTN_RESET_BG, fg=FG_PRIMARY, relief='flat', padx=10, cursor='hand2')
+        btn_back.pack(side='left', padx=15)
+        tk.Label(hdr, text="🧑‍🏫 Technical Analysis & Expected Defense Questions", font=('Segoe UI', 16, 'bold'), bg=BG_SIDEBAR, fg=FG_PRIMARY).pack(side='left', fill='x', expand=True)
+
+        canvas = tk.Canvas(win, bg=BG_MAIN, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(win, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas, bg=BG_MAIN)
+
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw", width=1400)
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        canvas.pack(side="left", fill="both", expand=True, padx=20, pady=20)
+        scrollbar.pack(side="right", fill="y", pady=20)
+
+        # Helper to create Q&A Panels
+        def add_qa_panel(question, answer, code_snippet=None):
+            card = tk.Frame(scrollable_frame, bg=BG_CARD, padx=20, pady=20)
+            card.pack(fill='x', pady=(0, 20), padx=20)
+            
+            tk.Label(card, text=f"Q: {question}", font=('Segoe UI', 14, 'bold'), fg=ACCENT_PRIMARY, bg=BG_CARD, justify='left', wraplength=1300, anchor='w').pack(fill='x', pady=(0, 10))
+            tk.Label(card, text=answer, font=('Segoe UI', 11), fg=FG_PRIMARY, bg=BG_CARD, justify='left', wraplength=1300, anchor='w').pack(fill='x', pady=(0, 15))
+            
+            if code_snippet:
+                code_frame = tk.Frame(card, bg='#151521', padx=15, pady=15)
+                code_frame.pack(fill='x')
+                tk.Label(code_frame, text=code_snippet, font=('Consolas', 10), fg='#00E5FF', bg='#151521', justify='left', anchor='w').pack(fill='x')
+
+        # Generate the panels
+        add_qa_panel(
+            "How does the program extract data from the CSV, and what data structure holds it?",
+            "The program opens 'dataset.csv' using python's built-in `csv.DictReader` to safely map headers. It dynamically extracts 'From Node', 'To Node', 'Distance', 'Time', and 'Fuel'. To store it, I used an Adjacency List represented by a Python Dictionary. Each key is a City, and its value is a list of Tuples containing the neighboring city and a nested dictionary of weights.",
+            "def load_graph(filepath):\n"
+            "    graph = {}\n"
+            "    nodes = set()\n"
+            "    with open(filepath, newline='', encoding='utf-8-sig') as f:\n"
+            "        reader = csv.DictReader(f)\n"
+            "        for row in reader:\n"
+            "            ... # parsing casting to float\n"
+            "            graph.setdefault(frm, []).append((to, {'distance': dist, 'time': time, 'fuel': fuel}))\n"
+            "            graph.setdefault(to,  []).append((frm, {'distance': dist, 'time': time, 'fuel': fuel}))"
+        )
+        
+        add_qa_panel(
+            "What algorithm did you implement to calculate the shortest path, and why?",
+            "I used Dijkstra's Algorithm. Since geographic values (distance, time, fuel) can never be negative, Dijkstra is mathematically optimal. I utilized a Min-Heap (via Python's `heapq` module) as a Priority Queue to keep the extraction of the lowest-cost edge at O(log V). The total time complexity thus comes out to O((V + E) log V).",
+            "def dijkstra(graph, start, end, weight_key):\n"
+            "    pq = [(0, start, [start])] # Cost, Current Node, Path Taken\n"
+            "    visited = {}\n"
+            "    while pq:\n"
+            "        cost, node, path = heapq.heappop(pq)\n"
+            "        if node in visited: continue\n"
+            "        visited[node] = (cost, path)\n"
+            "        ...\n"
+            "        for (nb, attrs) in graph.get(node, []):\n"
+            "            if nb not in visited:\n"
+            "                heapq.heappush(pq, (cost + attrs[weight_key], nb, path + [nb]))"
+        )
+        
+        add_qa_panel(
+            "If the user asks to optimize by 'Time', how does the program calculate the 'Fuel' and 'Distance' shown in the results?",
+            "This is a common trap! When calculating Dijkstra, I only sum up the active `weight_key`. If I optimized for Time, the shortest path guarantees the fastest route. But once that final array of nodes (e.g., [A, B, C]) is found, I iterate back through the graph specifically connecting those nodes and independently aggregate the exact Distance and Fuel values of that specific path.",
+            "        if node == end:\n"
+            "            totals = {'distance': 0, 'time': 0, 'fuel': 0}\n"
+            "            for i in range(len(path) - 1):\n"
+            "                a, b = path[i], path[i + 1]\n"
+            "                for (nb, attrs) in graph.get(a, []):\n"
+            "                    if nb == b:\n"
+            "                        totals['distance'] += attrs['distance']\n"
+            "                        totals['time']     += attrs['time']\n"
+            "                        totals['fuel']     += attrs['fuel']\n"
+            "            return cost, path, totals"
+        )
+
+        add_qa_panel(
+            "How did you implement the 'Global Hub' feature and trace back its exact ranking?",
+            "The Global Hub feature runs an 'All-Pairs Shortest Path' simulation dynamically. First, I iterate every single node as an 'Origin' using a standard for loop. For each origin, I run Dijkstra targeting every other node to gather the individual cost, and aggregate them into `total_cost`. These aggregate sums are saved into a List of Tuples: `(total_cost, origin_node, details)`. Finally, I execute Python's built-in `.sort(key=lambda x: x[0])` to rank them from the absolute lowest cost to highest, natively establishing the 'Top Hub' correctly at index 0.",
+            "        for start in self.nodes:\n"
+            "            total_cost = 0\n"
+            "            details = []\n"
+            "            for dest in self.nodes:\n"
+            "                if start == dest: continue\n"
+            "                cost, path, _ = dijkstra(self.graph, start, dest, m_key)\n"
+            "                if cost is not None:\n"
+            "                    total_cost += cost\n"
+            "            node_totals.append((total_cost, start, details))\n"
+            "        node_totals.sort(key=lambda x: x[0])  # Rank from Best to Worst"
+        )
+        
+        add_qa_panel(
+            "How are the numbers in the 'Algorithmic Stats' (like Order and Size) calculated so accurately?",
+            "Graph Order (V) represents the total number of Vertices. Since my `self.nodes` is a distinct Python `set()`, I just return `len(self.nodes)`. \n\nGraph Size (E) represents total Edges. Because this graph is Undirected (A -> B and B -> A both exist in the dictionary), summing the raw lengths of every neighbor list would double-count them. To fix this, I sum all elements inside `self.graph.values()` and floor-divide by 2 `// 2`, extracting the exact true Edge count instantaneously.",
+            "        num_v = len(self.nodes)\n"
+            "        num_e = sum(len(v) for v in self.graph.values()) // 2\n"
+            "        # Big-O Time: O((V + E) log V)\n"
+            "        # Big-O Space: O(V) for visited set + Priority Queue"
+        )
+
+        add_qa_panel(
+            "How is the canvas rendering the map coordinates effectively?",
+            "Instead of hardcoding raw pixel values, I mapped cities using proportional floats (e.g., 0.15, 0.25). A multiplier function takes the `CANVAS_W` and `CANVAS_H` and projects the percentages onto the screen. It separates drawing into 3 passes (Edges -> Labels -> Nodes) to ensure the overlapping visual hierarchy (z-index) puts nodes strictly on top.",
+            "    def pos(name):\n"
+            "        px, py = NODE_POSITIONS.get(name, (0.5, 0.5))\n"
+            "        return int(px * W), int(py * H)\n"
+            "    # Pass 1: Draw lines\n"
+            "    # Pass 2: Draw Labels ON TOP of lines\n"
+            "    # Pass 3: Draw Nodes ON TOP of labels"
+        )
+        
+        add_qa_panel(
+            "Why did you use a `set()` to store the nodes during data loading instead of a standard list?",
+            "A `set` automatically prevents duplicate entries. When reading the CSV, both 'From' and 'To' cities appear multiple times across different rows. By using `nodes.add(frm)`, it guarantees O(1) average time complexity for insertions and ensures each city is only stored once. If I used a list, I would have to use `if node not in list`, which operates at O(N) time complexity and heavily slows down the data loading.",
+            "def load_graph(filepath):\n"
+            "    graph = {}\n"
+            "    nodes = set() # Optimized for O(1) uniqueness\n"
+            "    with open(filepath, ...):\n"
+            "        ...\n"
+            "        nodes.add(frm)\n"
+            "        nodes.add(to)"
+        )
+
+        add_qa_panel(
+            "What happens if a user selects the exact same city for both the Origin and the Destination (e.g., Bacoor to Bacoor)?",
+            "The program intercepts this invalid input immediately at the UI event level. Inside the `on_dropdown_change` method, it checks if the selected origin matches the destination. If they are identical, it halts execution before the Dijkstra algorithm is even called, triggers a custom dialog box alerting the user, and safely resets the map. There is also a secondary fail-safe directly inside the `find_path` method that aborts the calculation if `start == end`.",
+            "    # Inside on_dropdown_change() UI event handler:\n"
+            "    if self.frm_var.get() == self.to_var.get():\n"
+            "        self.show_custom_dialog(\n"
+            "            \"Invalid Selection\", \n"
+            "            \"Origin and Destination cannot be the same.\\nPlease select different nodes.\"\n"
+            "        )\n"
+            "        self.reset_map()\n"
+            "    else:\n"
+            "        self.find_path()"
+        )
+
+        add_qa_panel(
+            "If a panelist runs your code on their own computer, will the program crash because the file path to the CSV is different?",
+            "No, the program is completely portable. Instead of hardcoding my local computer's absolute directory path, I utilized Python's built-in `os` module. Specifically, `os.path.dirname(os.path.abspath(__file__))` dynamically locates the exact folder where the script is currently running and looks for `dataset.csv` right next to it. I also wrapped it in a `try-except` block to catch a `FileNotFoundError` cleanly if the user forgot to download the CSV entirely.",
+            "if __name__ == '__main__':\n"
+            "    script_dir = os.path.dirname(os.path.abspath(__file__))\n"
+            "    CSV_FILE = os.path.join(script_dir, 'dataset.csv')\n"
+            "    try:\n"
+            "        graph, nodes = load_graph(CSV_FILE)\n"
+            "    except FileNotFoundError:\n"
+            "        print('ERROR: dataset.csv not found.')\n"
+            "        raise"
+        )
+
+        add_qa_panel(
+            "Your standard Dijkstra is O((V+E) log V). What is the exact mathematical time complexity of your 'Global Hub Analysis' feature?",
+            "The Global Hub acts as an 'All-Pairs Shortest Path' calculator. It loops through every node as an origin (V), and for each origin, it runs Dijkstra targeting every other node (V-1). Therefore, it executes the Dijkstra algorithm V × (V-1) times. The total theoretical time complexity functionally scales to O(V² × (V+E) log V). It executes instantly for our dataset of 8 cities, but for a massive nationwide grid, this specific unoptimized O(V³) bounding would need to be replaced with Floyd-Warshall or offloaded to a background thread to prevent UI freezing.",
+            "        for start in self.nodes: # Loops V times\n"
+            "            ... \n"
+            "            for dest in self.nodes: # Loops V-1 times\n"
+            "                if start == dest: continue\n"
+            "                cost, path, _ = dijkstra(self.graph, start, dest, m_key)"
+        )
+        
+        add_qa_panel(
+            "When traversing an Undirected Graph, how does your Dijkstra implementation prevent infinite loops (going back and forth between A and B)?",
+            "I utilize a `visited` dictionary. When a node is popped from the Priority Queue, it represents the absolute shortest known path to that node. It is immediately registered in `visited`. During neighbor exploration, the condition `if nb not in visited` acts as a strict firewall, blocking the algorithm from adding paths that trace back to previously finalized nodes.",
+            "    while pq:\n"
+            "        cost, node, path = heapq.heappop(pq)\n\n"
+            "        if node in visited: # Firewall 1: Check if already processed in queue\n"
+            "            continue\n"
+            "        visited[node] = (cost, path) # Mark node as permanently finalized\n\n"
+            "        for (nb, attrs) in graph.get(node, []):\n"
+            "            if nb not in visited: # Firewall 2: Do not backtrack\n"
+            "                heapq.heappush(pq, (new_cost, nb, path + [nb]))"
+        )
+
+        add_qa_panel(
+            "How does `heapq` know what to evaluate when sorting the queue? What happens if two paths have the exact same cost?",
+            "Python's `heapq` structures the Priority Queue as a Binary Min-Heap and compares tuples lexicographically (element by element). My tuples are structured as `(cost, node, path)`. By placing `cost` at index 0, the Min-Heap naturally extracts the lowest cost first. If two costs are identical, it falls back to index 1 (`node`), comparing the city names alphabetically. This prevents the program from crashing attempting to compare lists (`path`), effortlessly establishing a stable sort process.",
+            "    # Priority Queue tuple format: (cost, node_name, list_of_path_nodes)\n"
+            "    pq = [(0, start, [start])]\n"
+            "    \n"
+            "    while pq:\n"
+            "        # Pops the element with the lowest `cost` directly at index 0\n"
+            "        cost, node, path = heapq.heappop(pq)"
+        )
+
 
     def reset_map(self):
         draw_map(self.canvas, self.graph, self.nodes, active_metric=self.opt_var.get())

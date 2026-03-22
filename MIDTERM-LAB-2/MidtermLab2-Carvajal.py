@@ -644,6 +644,7 @@ class AppUI:
         add_qa_panel(
             "How does the program extract data from the CSV, and what data structure holds it?",
             "The program opens 'dataset.csv' using python's built-in `csv.DictReader` to safely map headers. It dynamically extracts 'From Node', 'To Node', 'Distance', 'Time', and 'Fuel'. To store it, I used an Adjacency List represented by a Python Dictionary. Each key is a City, and its value is a list of Tuples containing the neighboring city and a nested dictionary of weights.",
+            "# [See Code: Lines 11-30]\n"
             "def load_graph(filepath):\n"
             "    graph = {}\n"
             "    nodes = set()\n"
@@ -658,6 +659,7 @@ class AppUI:
         add_qa_panel(
             "What algorithm did you implement to calculate the shortest path, and why?",
             "I used Dijkstra's Algorithm. Since geographic values (distance, time, fuel) can never be negative, Dijkstra is mathematically optimal. I utilized a Min-Heap (via Python's `heapq` module) as a Priority Queue to keep the extraction of the lowest-cost edge at O(log V). The total time complexity thus comes out to O((V + E) log V).",
+            "# [See Code: Lines 37-69]\n"
             "def dijkstra(graph, start, end, weight_key):\n"
             "    pq = [(0, start, [start])] # Cost, Current Node, Path Taken\n"
             "    visited = {}\n"
@@ -674,6 +676,7 @@ class AppUI:
         add_qa_panel(
             "If the user asks to optimize by 'Time', how does the program calculate the 'Fuel' and 'Distance' shown in the results?",
             "This is a common trap! When calculating Dijkstra, I only sum up the active `weight_key`. If I optimized for Time, the shortest path guarantees the fastest route. But once that final array of nodes (e.g., [A, B, C]) is found, I iterate back through the graph specifically connecting those nodes and independently aggregate the exact Distance and Fuel values of that specific path.",
+            "# [See Code: Lines 53-64]\n"
             "        if node == end:\n"
             "            totals = {'distance': 0, 'time': 0, 'fuel': 0}\n"
             "            for i in range(len(path) - 1):\n"
@@ -689,6 +692,7 @@ class AppUI:
         add_qa_panel(
             "How did you implement the 'Global Hub' feature and trace back its exact ranking?",
             "The Global Hub feature runs an 'All-Pairs Shortest Path' simulation dynamically. First, I iterate every single node as an 'Origin' using a standard for loop. For each origin, I run Dijkstra targeting every other node to gather the individual cost, and aggregate them into `total_cost`. These aggregate sums are saved into a List of Tuples: `(total_cost, origin_node, details)`. Finally, I execute Python's built-in `.sort(key=lambda x: x[0])` to rank them from the absolute lowest cost to highest, natively establishing the 'Top Hub' correctly at index 0.",
+            "# [See Code: Lines 365-373]\n"
             "        for start in self.nodes:\n"
             "            total_cost = 0\n"
             "            details = []\n"
@@ -704,6 +708,7 @@ class AppUI:
         add_qa_panel(
             "How are the numbers in the 'Algorithmic Stats' (like Order and Size) calculated so accurately?",
             "Graph Order (V) represents the total number of Vertices. Since my `self.nodes` is a distinct Python `set()`, I just return `len(self.nodes)`. \n\nGraph Size (E) represents total Edges. Because this graph is Undirected (A -> B and B -> A both exist in the dictionary), summing the raw lengths of every neighbor list would double-count them. To fix this, I sum all elements inside `self.graph.values()` and floor-divide by 2 `// 2`, extracting the exact true Edge count instantaneously.",
+            "# [See Code: Lines 453-456]\n"
             "        num_v = len(self.nodes)\n"
             "        num_e = sum(len(v) for v in self.graph.values()) // 2\n"
             "        # Big-O Time: O((V + E) log V)\n"
@@ -713,6 +718,7 @@ class AppUI:
         add_qa_panel(
             "How is the canvas rendering the map coordinates effectively?",
             "Instead of hardcoding raw pixel values, I mapped cities using proportional floats (e.g., 0.15, 0.25). A multiplier function takes the `CANVAS_W` and `CANVAS_H` and projects the percentages onto the screen. It separates drawing into 3 passes (Edges -> Labels -> Nodes) to ensure the overlapping visual hierarchy (z-index) puts nodes strictly on top.",
+            "# [See Code: Lines 92-142]\n"
             "    def pos(name):\n"
             "        px, py = NODE_POSITIONS.get(name, (0.5, 0.5))\n"
             "        return int(px * W), int(py * H)\n"
@@ -724,6 +730,7 @@ class AppUI:
         add_qa_panel(
             "Why did you use a `set()` to store the nodes during data loading instead of a standard list?",
             "A `set` automatically prevents duplicate entries. When reading the CSV, both 'From' and 'To' cities appear multiple times across different rows. By using `nodes.add(frm)`, it guarantees O(1) average time complexity for insertions and ensures each city is only stored once. If I used a list, I would have to use `if node not in list`, which operates at O(N) time complexity and heavily slows down the data loading.",
+            "# [See Code: Lines 13-25]\n"
             "def load_graph(filepath):\n"
             "    graph = {}\n"
             "    nodes = set() # Optimized for O(1) uniqueness\n"
@@ -736,6 +743,7 @@ class AppUI:
         add_qa_panel(
             "What happens if a user selects the exact same city for both the Origin and the Destination (e.g., Bacoor to Bacoor)?",
             "The program intercepts this invalid input immediately at the UI event level. Inside the `on_dropdown_change` method, it checks if the selected origin matches the destination. If they are identical, it halts execution before the Dijkstra algorithm is even called, triggers a custom dialog box alerting the user, and safely resets the map. There is also a secondary fail-safe directly inside the `find_path` method that aborts the calculation if `start == end`.",
+            "# [See Code: Lines 339-345]\n"
             "    # Inside on_dropdown_change() UI event handler:\n"
             "    if self.frm_var.get() == self.to_var.get():\n"
             "        self.show_custom_dialog(\n"
@@ -750,6 +758,7 @@ class AppUI:
         add_qa_panel(
             "If a panelist runs your code on their own computer, will the program crash because the file path to the CSV is different?",
             "No, the program is completely portable. Instead of hardcoding my local computer's absolute directory path, I utilized Python's built-in `os` module. Specifically, `os.path.dirname(os.path.abspath(__file__))` dynamically locates the exact folder where the script is currently running and looks for `dataset.csv` right next to it. I also wrapped it in a `try-except` block to catch a `FileNotFoundError` cleanly if the user forgot to download the CSV entirely.",
+            "# [See Code: Lines 885-895]\n"
             "if __name__ == '__main__':\n"
             "    script_dir = os.path.dirname(os.path.abspath(__file__))\n"
             "    CSV_FILE = os.path.join(script_dir, 'dataset.csv')\n"
@@ -763,6 +772,7 @@ class AppUI:
         add_qa_panel(
             "Your standard Dijkstra is O((V+E) log V). What is the exact mathematical time complexity of your 'Global Hub Analysis' feature?",
             "The Global Hub acts as an 'All-Pairs Shortest Path' calculator. It loops through every node as an origin (V), and for each origin, it runs Dijkstra targeting every other node (V-1). Therefore, it executes the Dijkstra algorithm V × (V-1) times. The total theoretical time complexity functionally scales to O(V² × (V+E) log V). It executes instantly for our dataset of 8 cities, but for a massive nationwide grid, this specific unoptimized O(V³) bounding would need to be replaced with Floyd-Warshall or offloaded to a background thread to prevent UI freezing.",
+            "# [See Code: Lines 366-372]\n"
             "        for start in self.nodes: # Loops V times\n"
             "            ... \n"
             "            for dest in self.nodes: # Loops V-1 times\n"
@@ -773,6 +783,7 @@ class AppUI:
         add_qa_panel(
             "When traversing an Undirected Graph, how does your Dijkstra implementation prevent infinite loops (going back and forth between A and B)?",
             "I utilize a `visited` dictionary. When a node is popped from the Priority Queue, it represents the absolute shortest known path to that node. It is immediately registered in `visited`. During neighbor exploration, the condition `if nb not in visited` acts as a strict firewall, blocking the algorithm from adding paths that trace back to previously finalized nodes.",
+            "# [See Code: Lines 46-68]\n"
             "    while pq:\n"
             "        cost, node, path = heapq.heappop(pq)\n\n"
             "        if node in visited: # Firewall 1: Check if already processed in queue\n"
@@ -786,6 +797,7 @@ class AppUI:
         add_qa_panel(
             "How does `heapq` know what to evaluate when sorting the queue? What happens if two paths have the exact same cost?",
             "Python's `heapq` structures the Priority Queue as a Binary Min-Heap and compares tuples lexicographically (element by element). My tuples are structured as `(cost, node, path)`. By placing `cost` at index 0, the Min-Heap naturally extracts the lowest cost first. If two costs are identical, it falls back to index 1 (`node`), comparing the city names alphabetically. This prevents the program from crashing attempting to compare lists (`path`), effortlessly establishing a stable sort process.",
+            "# [See Code: Lines 43-47]\n"
             "    # Priority Queue tuple format: (cost, node_name, list_of_path_nodes)\n"
             "    pq = [(0, start, [start])]\n"
             "    \n"

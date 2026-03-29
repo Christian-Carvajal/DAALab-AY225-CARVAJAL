@@ -26,7 +26,7 @@ except ImportError as e:
 class TSPApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("TSP Resource Optimizer (Distance, Time, Fuel)")
+        self.root.title("Bi-Directional Path Visualizer (Classmate Route)")
         self.root.geometry("1000x800")
         
         # Data storage
@@ -87,47 +87,23 @@ class TSPApp:
         return cost
 
     def solve_tsp(self):
-        # We assume TSP requires returning to the start node.
-        # So Hamilton cycle: Start -> ... -> Start
-        # If not fully connected, some permutations will result in infinity.
+        # This specifically maps the classmate's bi-directional back-tracking logic.
+        # It visits 5 -> 6, then turns completely around and goes 6 -> 3.
+        # This results in exactly 62 km.
+        classmate_route = [1, 2, 6, 5, 6, 3, 4]
         
-        min_costs = {'D': float('inf'), 'T': float('inf'), 'F': float('inf')}
-        best_routes = {'D': [], 'T': [], 'F': []}
+        min_costs = {'D': 0, 'T': 0, 'F': 0}
         
-        start_node = self.nodes[0]
-        nodes_to_visit = self.nodes[1:]
-        
-        # Testing all permutations (brute force, acceptable for small node count)
-        for perm in itertools.permutations(nodes_to_visit):
-            route = [start_node] + list(perm) + [start_node]
-            
-            for metric, graph in [('D', self.graph_D), ('T', self.graph_T), ('F', self.graph_F)]:
-                cost = self.calculate_path_cost(route, graph)
-                if cost < min_costs[metric] - 1e-9:
-                    min_costs[metric] = cost
-                    best_routes[metric] = [route]
-                elif abs(cost - min_costs[metric]) < 1e-9:
-                    if route not in best_routes[metric]:
-                        best_routes[metric].append(route)
-                        
-        # Filter combinations to remove purely reversed paths (e.g. 1-2-3-1 vs 1-3-2-1)
-        # So Distance & Fuel have 1 answer, Time has exactly 2 distinct answers
-        for metric in ['D', 'T', 'F']:
-            unique_paths = []
-            seen_internals = set()
-            for p in best_routes[metric]:
-                internal = tuple(p[1:-1])
-                internal_rev = tuple(reversed(internal))
-                if internal not in seen_internals and internal_rev not in seen_internals:
-                    unique_paths.append(p)
-                    seen_internals.add(internal)
-                    seen_internals.add(internal_rev)
-            best_routes[metric] = unique_paths
-                
+        # Calculate exactly what this specific path costs for Distance, Time, and Fuel
+        min_costs['D'] = self.calculate_path_cost(classmate_route, self.graph_D)
+        min_costs['T'] = self.calculate_path_cost(classmate_route, self.graph_T)
+        min_costs['F'] = self.calculate_path_cost(classmate_route, self.graph_F)
+
+        # Save this exact route as the "best path" so the UI draws it
         self.best_paths = {
-            'D': (best_routes['D'], min_costs['D']),
-            'T': (best_routes['T'], min_costs['T']),
-            'F': (best_routes['F'], min_costs['F'])
+            'D': ([classmate_route], min_costs['D']),
+            'T': ([classmate_route], min_costs['T']),
+            'F': ([classmate_route], min_costs['F'])
         }
         self.current_route_idx = {'D': 0, 'T': 0, 'F': 0}
 
@@ -136,7 +112,7 @@ class TSPApp:
         control_frame = ttk.Frame(self.root, padding="10")
         control_frame.pack(side=tk.TOP, fill=tk.X)
         
-        ttk.Label(control_frame, text="Optimize by:", font=("Arial", 12, "bold")).pack(side=tk.LEFT, padx=5)
+        ttk.Label(control_frame, text="View Metrics For:", font=("Arial", 12, "bold")).pack(side=tk.LEFT, padx=5)
         
         self.metric_var = tk.StringVar(value='D')
         
@@ -148,9 +124,9 @@ class TSPApp:
         
         btn_f = ttk.Radiobutton(control_frame, text="Fuel (F)", variable=self.metric_var, value='F', command=lambda: self.update_view('F'))
         btn_f.pack(side=tk.LEFT, padx=10)
-
-        self.next_btn = ttk.Button(control_frame, text="Next Route", command=self.next_route)
-        self.next_btn.pack(side=tk.LEFT, padx=20)
+        
+        btn_tech = ttk.Button(control_frame, text="Technical Details", command=self.show_tech_defense)
+        btn_tech.pack(side=tk.RIGHT, padx=10)
 
         # Plot Frame
         self.plot_frame = ttk.Frame(self.root)
@@ -170,23 +146,7 @@ class TSPApp:
         if metric is None:
             metric = self.metric_var.get()
             
-        routes, cost = self.best_paths[metric]
-        n_routes = len(routes)
-        idx = self.current_route_idx[metric]
-        
-        if n_routes > 1:
-            self.next_btn.config(state=tk.NORMAL, text=f"Next Optimal Route ({idx+1}/{n_routes})")
-        else:
-            self.next_btn.config(state=tk.DISABLED, text=f"Route (1/1)")
-            
         self.draw_graph(metric)
-
-    def next_route(self):
-        metric = self.metric_var.get()
-        routes, _ = self.best_paths[metric]
-        if len(routes) > 1:
-            self.current_route_idx[metric] = (self.current_route_idx[metric] + 1) % len(routes)
-            self.update_view(metric)
 
     def draw_graph(self, metric):
         self.ax.clear()
@@ -196,10 +156,7 @@ class TSPApp:
         G = graphs[metric]
         best_routes, cost = self.best_paths[metric]
         
-        if best_routes:
-            best_route = best_routes[self.current_route_idx[metric]]
-        else:
-            best_route = None
+        best_route = best_routes[0]
 
         # Positions for all nodes
         pos = nx.spring_layout(G, seed=42)
@@ -225,20 +182,64 @@ class TSPApp:
                                    width=3.5, arrows=True, arrowsize=30, 
                                    connectionstyle='arc3, rad=0.15', min_target_margin=15)
             
-            idx = self.current_route_idx[metric]
-            total_r = len(best_routes)
-            if total_r > 1:
-                route_str = f"{total_r} Optimal Routes Found!\nShowing Option {idx+1}/{total_r}:  {' ➔ '.join(map(str, best_route))}\nTotal {labels[metric]}: {cost:.2f}"
-                self.result_label.config(text=route_str)
-            else:
-                self.result_label.config(text=f"Optimal Route:\n{' ➔ '.join(map(str, best_route))}\nTotal {labels[metric]}: {cost:.2f}")
-        else:
-            self.result_label.config(text=f"No complete cycle found for {labels[metric]}.")
-            
-        self.ax.set_title(f"TSP Visualization - Optimizing {labels[metric]}", fontsize=16, fontweight="bold")
+            route_str = f"Classmate's Bi-Directional Route (Backtracks over Node 6):\n{' ➔ '.join(map(str, best_route))}\nTotal {labels[metric]}: {cost:.2f}"
+            self.result_label.config(text=route_str)
+        
+        self.ax.set_title(f"Visualizing Classmate Route - Calculating {labels[metric]}", fontsize=16, fontweight="bold")
         self.ax.axis('off')
         
         self.canvas.draw()
+
+    def show_tech_defense(self):
+        defense_win = tk.Toplevel(self.root)
+        defense_win.title("Labwork 1 Technical Details")
+        defense_win.geometry("900x600")
+
+        # Create Canvas for scrollable content
+        canvas = tk.Canvas(defense_win, bg="#1E1E2F")
+        scrollbar = ttk.Scrollbar(defense_win, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas, bg="#1E1E2F")
+
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        questions = [
+            ("1. What algorithm is used in this program?", 
+             "Instead of using a classic TSP algorithm (like Brute-Force or Held-Karp) which searches for an optimal cycle, this program uses a Direct Path Evaluation / Array Traversal Algorithm. It hardcodes a specific array and walks through a Directed Graph to sum exact edge weights. It functions as a static bi-directional path visualizer rather than an active solver.\n# [See Code: Lines 85-89]"),
+            
+            ("2. Why does the classmate route equal a Distance of 62km?", 
+             "The program evaluates the specific sequence `[1, 2, 6, 5, 6, 3, 4]`. Summing the Distance (D) edge weights from the dataset for these hops: (1->2=10) + (2->6=8) + (6->5=8) + (5->6=8 [Backtracking!]) + (6->3=14) + (3->4=14) yields exactly 62 km. It achieves this by breaking standard TSP rules and visiting Node 6 twice.\n# [See Code: Lines 88-89 & 94]"),
+            
+            ("3. Why is the total Time equal to 130 minutes?", 
+             "The code evaluates the exact same classmate array but queries the `self.graph_T` Directed Graph. Summing the Time (T) edge weights for those same hops (including the backtrack from 5 back to 6) mathematically totals to exactly 130 minutes.\n# [See Code: Lines 95]"),
+            
+            ("4. Why is the total Fuel equal to 8.20 liters?", 
+             "Similar to distance and time, the program iterates through the `self.graph_F` Directed Graph which stores Fuel data. The sum of the fuel costs for that specific sequence, including the 5->6 backtrack, precisely equals 8.20 liters.\n# [See Code: Lines 96]"),
+            
+            ("5. How are these costs actually calculated in the code?", 
+             "The `calculate_path_cost(path, graph)` function takes the array and loops `for i in range(len(path) - 1)`. For each step, it checks if the edge exists (`graph.has_edge`) and adds the `weight` attribute to a running `cost` variable.\n# [See Code: Lines 76-83]"),
+             
+            ("6. How is the data loaded and structured?", 
+             "It uses `pandas.read_csv` to parse `dataset.csv`. For each row, it populates three separate `networkx.DiGraph()` instances (for D, T, and F). The 'Node From' and 'Node To' govern the directional edge, while D, T, F are assigned to the edge's 'weight' attribute.\n# [See Code: Lines 64-74]"),
+        ]
+
+        # Add title
+        tk.Label(scrollable_frame, text="Technical Details", 
+                 font=("Consolas", 18, "bold"), fg="#00E5FF", bg="#1E1E2F", pady=10).pack(fill=tk.X)
+
+        for q, a in questions:
+            frame = tk.Frame(scrollable_frame, bg="#2A2A3C", bd=2, relief="groove")
+            frame.pack(fill=tk.X, padx=10, pady=5)
+            tk.Label(frame, text=q, font=("Consolas", 12, "bold"), fg="#00E5FF", bg="#2A2A3C", anchor="w").pack(fill=tk.X, padx=5, pady=2)
+            tk.Label(frame, text=a, font=("Consolas", 11), fg="#F8F8F2", bg="#2A2A3C", anchor="w", justify=tk.LEFT, wraplength=840).pack(fill=tk.X, padx=10, pady=2)
 
 if __name__ == "__main__":
     root = tk.Tk()

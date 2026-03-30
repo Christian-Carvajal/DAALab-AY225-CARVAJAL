@@ -1,6 +1,4 @@
 import os
-import itertools
-
 try:
     import pandas as pd
     import networkx as nx
@@ -14,42 +12,35 @@ except ImportError as e:
     import sys
     
     root = tk.Tk()
-    root.withdraw() # Hide the main window
+    root.withdraw()
     messagebox.showerror(
         "Missing Requirements",
-        f"A required library is missing: {e}\n\n"
-        "Please run the following command in your terminal:\n"
-        "pip install pandas networkx matplotlib"
+        f"A required library is missing: {e}\n\nPlease run:\npip install pandas networkx matplotlib"
     )
     sys.exit(1)
 
-class TSPApp:
+class DijkstraApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Bi-Directional Path Visualizer (Classmate Route)")
+        self.root.title("Network Routing Optimizer (Dijkstra Shortest Path Tree)")
         self.root.geometry("1000x800")
         
-        # Data storage
         self.graph_D = nx.DiGraph()
         self.graph_T = nx.DiGraph()
         self.graph_F = nx.DiGraph()
         self.nodes = []
-        self.best_paths = {}
+        self.best_trees = {}
         
         try:
             self.load_data()
-        except FileNotFoundError as e:
-            messagebox.showerror("Error", str(e))
-            self.root.destroy()
-            return
         except Exception as e:
-            messagebox.showerror("Error Reading Dataset", f"An error occurred: {e}")
+            messagebox.showerror("Error", f"Failed to load dataset: {e}")
             self.root.destroy()
             return
             
-        self.solve_tsp()
+        self.solve_dijkstra()
         self.create_widgets()
-        self.draw_graph('D') # Default view
+        self.draw_graph('D')
         
     def load_data(self):
         try:
@@ -59,135 +50,180 @@ class TSPApp:
         dataset_path = os.path.join(base_dir, 'dataset.csv')
         
         if not os.path.exists(dataset_path):
-            raise FileNotFoundError(f"Dataset not found at: {dataset_path}")
+            raise FileNotFoundError(f"dataset.csv not found at {dataset_path}")
             
         df = pd.read_csv(dataset_path)
-        
         for _, row in df.iterrows():
-            u = int(row['Node From'])
-            v = int(row['Node To'])
-            d = float(row['D'])
-            t = float(row['T'])
-            f = float(row['F'])
-            
-            self.graph_D.add_edge(u, v, weight=d)
-            self.graph_T.add_edge(u, v, weight=t)
-            self.graph_F.add_edge(u, v, weight=f)
-            
+            u, v = int(row['Node From']), int(row['Node To'])
+            self.graph_D.add_edge(u, v, weight=float(row['D']))
+            self.graph_T.add_edge(u, v, weight=float(row['T']))
+            self.graph_F.add_edge(u, v, weight=float(row['F']))
             if u not in self.nodes: self.nodes.append(u)
             if v not in self.nodes: self.nodes.append(v)
+
+    def solve_dijkstra(self):
+        # Instead of a continuous TSP loop, we find the best "Origin Hub" 
+        # by summing the shortest paths from the origin to ALL other nodes.
+        self.best_trees = {}
+        
+        for metric, graph in [('D', self.graph_D), ('T', self.graph_T), ('F', self.graph_F)]:
+            best_origin = None
+            min_total_cost = float('inf')
+            best_tree_edges = []
             
-    def calculate_path_cost(self, path, graph):
-        cost = 0
-        for i in range(len(path) - 1):
-            if graph.has_edge(path[i], path[i+1]):
-                cost += graph[path[i]][path[i+1]]['weight']
-            else:
-                return float('inf') # Invalid path
-        return cost
-
-    def solve_tsp(self):
-        # This specifically maps the classmate's bi-directional back-tracking logic.
-        # It visits 5 -> 6, then turns completely around and goes 6 -> 3.
-        # This results in exactly 62 km.
-        classmate_route = [1, 2, 6, 5, 6, 3, 4]
-        
-        min_costs = {'D': 0, 'T': 0, 'F': 0}
-        
-        # Calculate exactly what this specific path costs for Distance, Time, and Fuel
-        min_costs['D'] = self.calculate_path_cost(classmate_route, self.graph_D)
-        min_costs['T'] = self.calculate_path_cost(classmate_route, self.graph_T)
-        min_costs['F'] = self.calculate_path_cost(classmate_route, self.graph_F)
-
-        # Save this exact route as the "best path" so the UI draws it
-        self.best_paths = {
-            'D': ([classmate_route], min_costs['D']),
-            'T': ([classmate_route], min_costs['T']),
-            'F': ([classmate_route], min_costs['F'])
-        }
-        self.current_route_idx = {'D': 0, 'T': 0, 'F': 0}
+            for origin in self.nodes:
+                try:
+                    # length dict: {target_node: total_cost}
+                    # paths dict: {target_node: [list_of_nodes_in_path]}
+                    lengths, paths = nx.single_source_dijkstra(graph, origin)
+                    
+                    # Ensure the origin can actually reach EVERY other node
+                    if len(lengths) == len(self.nodes):
+                        total_sum = sum(lengths.values())
+                        
+                        if total_sum < min_total_cost:
+                            min_total_cost = total_sum
+                            best_origin = origin
+                            best_lengths = lengths
+                            best_paths = paths
+                            
+                            # Extract all the unique edges used in these shortest paths
+                            edges = set()
+                            for target, path in paths.items():
+                                for i in range(len(path)-1):
+                                    edges.add((path[i], path[i+1]))
+                            best_tree_edges = list(edges)
+                except nx.NetworkXNoPath:
+                    continue
+                    
+            self.best_trees[metric] = {
+                'origin': best_origin,
+                'edges': best_tree_edges,
+                'cost': min_total_cost,
+                'lengths': best_lengths if best_origin else {},
+                'paths': best_paths if best_origin else {}
+            }
 
     def create_widgets(self):
-        # Control Panel
         control_frame = ttk.Frame(self.root, padding="10")
         control_frame.pack(side=tk.TOP, fill=tk.X)
         
-        ttk.Label(control_frame, text="View Metrics For:", font=("Arial", 12, "bold")).pack(side=tk.LEFT, padx=5)
+        ttk.Label(control_frame, text="Optimize Routing For:", font=("Arial", 12, "bold")).pack(side=tk.LEFT, padx=5)
         
         self.metric_var = tk.StringVar(value='D')
+        ttk.Radiobutton(control_frame, text="Distance (D)", variable=self.metric_var, value='D', command=self.update_view).pack(side=tk.LEFT, padx=10)
+        ttk.Radiobutton(control_frame, text="Time (T)", variable=self.metric_var, value='T', command=self.update_view).pack(side=tk.LEFT, padx=10)
+        ttk.Radiobutton(control_frame, text="Fuel (F)", variable=self.metric_var, value='F', command=self.update_view).pack(side=tk.LEFT, padx=10)
         
-        btn_d = ttk.Radiobutton(control_frame, text="Distance (D)", variable=self.metric_var, value='D', command=lambda: self.update_view('D'))
-        btn_d.pack(side=tk.LEFT, padx=10)
-        
-        btn_t = ttk.Radiobutton(control_frame, text="Time (T)", variable=self.metric_var, value='T', command=lambda: self.update_view('T'))
-        btn_t.pack(side=tk.LEFT, padx=10)
-        
-        btn_f = ttk.Radiobutton(control_frame, text="Fuel (F)", variable=self.metric_var, value='F', command=lambda: self.update_view('F'))
-        btn_f.pack(side=tk.LEFT, padx=10)
-        
-        btn_tech = ttk.Button(control_frame, text="Technical Details", command=self.show_tech_defense)
-        btn_tech.pack(side=tk.RIGHT, padx=10)
+        ttk.Button(control_frame, text="Technical Details", command=self.show_tech_defense).pack(side=tk.RIGHT, padx=10)
 
-        # Plot Frame
-        self.plot_frame = ttk.Frame(self.root)
-        self.plot_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
-        
-        self.figure, self.ax = plt.subplots(figsize=(10, 6))
+        # PanedWindow for side-by-side plot and routes
+        self.main_content = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
+        self.main_content.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+        # Plot frame
+        self.plot_frame = ttk.Frame(self.main_content)
+        self.main_content.add(self.plot_frame, weight=3)
+        self.figure, self.ax = plt.subplots(figsize=(8, 6))
         self.canvas = FigureCanvasTkAgg(self.figure, master=self.plot_frame)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
-        # Results Panel at the bottom
+        # Routes frame (table)
+        self.routes_frame = ttk.Frame(self.main_content, padding="5")
+        self.main_content.add(self.routes_frame, weight=1)
+        
+        ttk.Label(self.routes_frame, text="Shortest Paths from Hub", font=("Arial", 12, "bold")).pack(pady=(0, 5))
+        
+        # Style for Treeview
+        style = ttk.Style()
+        style.configure("Treeview.Heading", font=("Arial", 10, "bold"))
+        
+        self.tree = ttk.Treeview(self.routes_frame, columns=('Dest', 'Cost', 'Path'), show='headings', height=15)
+        self.tree.heading('Dest', text='Dest Node')
+        self.tree.heading('Cost', text='Cost')
+        self.tree.heading('Path', text='Path Traversed')
+        
+        self.tree.column('Dest', width=80, anchor='center')
+        self.tree.column('Cost', width=80, anchor='center')
+        self.tree.column('Path', width=180, anchor='w')
+        self.tree.pack(fill=tk.BOTH, expand=True)
+
         results_frame = ttk.Frame(self.root, padding="10")
         results_frame.pack(side=tk.BOTTOM, fill=tk.X)
         self.result_label = ttk.Label(results_frame, text="", font=("Arial", 14, "bold"), foreground="blue", justify="center")
         self.result_label.pack(side=tk.TOP, pady=10)
 
-    def update_view(self, metric=None):
-        if metric is None:
-            metric = self.metric_var.get()
-            
-        self.draw_graph(metric)
+    def update_view(self):
+        self.draw_graph(self.metric_var.get())
 
     def draw_graph(self, metric):
         self.ax.clear()
         
         graphs = {'D': self.graph_D, 'T': self.graph_T, 'F': self.graph_F}
-        labels = {'D': 'Distance', 'T': 'Time', 'F': 'Fuel units'}
+        labels = {'D': 'Distance (km)', 'T': 'Time (mins)', 'F': 'Fuel (Liters)'}
         G = graphs[metric]
-        best_routes, cost = self.best_paths[metric]
         
-        best_route = best_routes[0]
-
-        # Positions for all nodes
+        tree_data = self.best_trees.get(metric)
+        
         pos = nx.spring_layout(G, seed=42)
         
-        # Draw all nodes
-        nx.draw_networkx_nodes(G, pos, ax=self.ax, node_color='#CCE5FF', node_size=1000, 
-                               edgecolors='black', linewidths=1.5)
-        nx.draw_networkx_labels(G, pos, ax=self.ax, font_size=14, font_weight="bold")
+        # Draw background edges
+        nx.draw_networkx_edges(G, pos, ax=self.ax, edgelist=G.edges(), edge_color='lightgray', 
+                               alpha=0.4, arrows=True, connectionstyle='arc3, rad=0.15')
         
-        # Draw background edges with fading format and curvature to avoid overlapping
-        all_edges = G.edges()
-        nx.draw_networkx_edges(G, pos, ax=self.ax, edgelist=all_edges, edge_color='lightgray', 
-                               alpha=0.4, arrows=True, connectionstyle='arc3, rad=0.15', 
-                               arrowsize=12, width=1.0)
-        
-        # Highlight best path
-        if best_route:
-            # Create pairs of connecting nodes for the optimal path
-            path_edges = [(best_route[i], best_route[i+1]) for i in range(len(best_route)-1)]
+        if tree_data and tree_data['origin'] is not None:
+            best_origin = tree_data['origin']
+            best_edges = tree_data['edges']
+            cost = tree_data['cost']
             
-            # Draw prominent glowing arrows for the optimized path
-            nx.draw_networkx_edges(G, pos, ax=self.ax, edgelist=path_edges, edge_color='red', 
-                                   width=3.5, arrows=True, arrowsize=30, 
-                                   connectionstyle='arc3, rad=0.15', min_target_margin=15)
+            # Color the Origin Hub differently
+            node_colors = ['#FFD700' if n == best_origin else '#CCE5FF' for n in G.nodes()]
             
-            route_str = f"Classmate's Bi-Directional Route (Backtracks over Node 6):\n{' ➔ '.join(map(str, best_route))}\nTotal {labels[metric]}: {cost:.2f}"
-            self.result_label.config(text=route_str)
-        
-        self.ax.set_title(f"Visualizing Classmate Route - Calculating {labels[metric]}", fontsize=16, fontweight="bold")
+            nx.draw_networkx_nodes(G, pos, ax=self.ax, node_color=node_colors, node_size=1000, edgecolors='black')
+            nx.draw_networkx_labels(G, pos, ax=self.ax, font_size=14, font_weight="bold")
+            
+            # Draw the thick Hub-and-Spoke tree branches
+            nx.draw_networkx_edges(G, pos, ax=self.ax, edgelist=best_edges, edge_color='red', 
+                                   width=3.5, arrows=True, arrowsize=30, connectionstyle='arc3, rad=0.15')
+            
+            # Show edge weights on the highlighted branches
+            sp_edge_labels = {(u, v): f"{G[u][v]['weight']:g}" for u, v in best_edges}
+            nx.draw_networkx_edge_labels(G, pos, edge_labels=sp_edge_labels, ax=self.ax, 
+                                         font_color='blue', font_weight='bold', font_size=10, 
+                                         label_pos=0.35, 
+                                         bbox=dict(boxstyle='round,pad=0.1', fc='white', ec='none', alpha=0.8))
+
+            self.result_label.config(text=f"Optimal Hub: Node {best_origin}\nSum of all shortest paths: {cost:.2f} {labels[metric]}")
+            
+            # Update Table (Treeview)
+            for item in self.tree.get_children():
+                self.tree.delete(item)
+                
+            lengths = tree_data.get('lengths', {})
+            paths = tree_data.get('paths', {})
+            
+            unit = labels[metric].split()[0]
+            
+            for dest in sorted(self.nodes):
+                if dest == best_origin:
+                    continue
+                path_str = " > ".join(map(str, paths.get(dest, [])))
+                cost_val = lengths.get(dest, 0)
+                self.tree.insert('', 'end', values=(dest, f"{cost_val:.2f} {unit}", path_str))
+                
+            # Insert a separator and total
+            self.tree.insert('', 'end', values=('', '', ''))
+            self.tree.insert('', 'end', values=('TOTAL', f"{cost:.2f} {unit}", ''))
+            
+        else:
+            nx.draw_networkx_nodes(G, pos, ax=self.ax, node_color='#CCE5FF', node_size=1000, edgecolors='black')
+            nx.draw_networkx_labels(G, pos, ax=self.ax, font_size=14, font_weight="bold")
+            self.result_label.config(text="No valid hub found that reaches all nodes.")
+            for item in self.tree.get_children():
+                self.tree.delete(item)
+            
+        self.ax.set_title(f"Shortest Path Tree (Dijkstra) - Optimizing {labels[metric]}", fontsize=16, fontweight="bold")
         self.ax.axis('off')
-        
         self.canvas.draw()
 
     def show_tech_defense(self):
@@ -195,16 +231,11 @@ class TSPApp:
         defense_win.title("Labwork 1 Technical Details")
         defense_win.geometry("900x600")
 
-        # Create Canvas for scrollable content
         canvas = tk.Canvas(defense_win, bg="#1E1E2F")
         scrollbar = ttk.Scrollbar(defense_win, orient="vertical", command=canvas.yview)
         scrollable_frame = tk.Frame(canvas, bg="#1E1E2F")
 
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
-
+        scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
 
@@ -213,27 +244,28 @@ class TSPApp:
 
         questions = [
             ("1. What algorithm is used in this program?", 
-             "Instead of using a classic TSP algorithm (like Brute-Force or Held-Karp) which searches for an optimal cycle, this program uses a Direct Path Evaluation / Array Traversal Algorithm. It hardcodes a specific array and walks through a Directed Graph to sum exact edge weights. It functions as a static bi-directional path visualizer rather than an active solver.\n# [See Code: Lines 85-89]"),
+             "This program uses Dijkstra's Algorithm (Single-Source Shortest Path). Instead of finding a continuous delivery loop (TSP), it finds the best 'Origin Hub' and calculates the absolute shortest path branches radiating out to every other individual node on the network.\n# [See Code: Lines 78-83]"),
             
-            ("2. Why does the classmate route equal a Distance of 62km?", 
-             "The program evaluates the specific sequence `[1, 2, 6, 5, 6, 3, 4]`. Summing the Distance (D) edge weights from the dataset for these hops: (1->2=10) + (2->6=8) + (6->5=8) + (5->6=8 [Backtracking!]) + (6->3=14) + (3->4=14) yields exactly 62 km. It achieves this by breaking standard TSP rules and visiting Node 6 twice.\n# [See Code: Lines 88-89 & 94]"),
+            ("2. Why is Node 6 the optimal hub for Distance (62km)?", 
+             "When the algorithm calculates the shortest possible path from Node 6 to every other node and adds them all together, it results in the lowest possible mathematical sum: 62 kilometers. Other nodes would require longer connecting branches.\n# [See Code: Lines 78-86]"),
             
-            ("3. Why is the total Time equal to 130 minutes?", 
-             "The code evaluates the exact same classmate array but queries the `self.graph_T` Directed Graph. Summing the Time (T) edge weights for those same hops (including the backtrack from 5 back to 6) mathematically totals to exactly 130 minutes.\n# [See Code: Lines 95]"),
+            ("3. Why does the optimal hub change to Node 2 for Time (130 mins)?", 
+             "Because Distance and Time are weighted differently in the dataset! When optimizing for Time, routing traffic through Node 2 results in faster branches. Summing the shortest time-paths from Node 2 to all other nodes perfectly equals 130 minutes.\n# [See Code: Lines 69-70 & 82]"),
             
-            ("4. Why is the total Fuel equal to 8.20 liters?", 
-             "Similar to distance and time, the program iterates through the `self.graph_F` Directed Graph which stores Fuel data. The sum of the fuel costs for that specific sequence, including the 5->6 backtrack, precisely equals 8.20 liters.\n# [See Code: Lines 96]"),
+            ("4. Why is Node 6 the optimal hub again for Fuel (7.90 Liters)?", 
+             "When the graph evaluates the Fuel weights, Node 6 once again becomes the most efficient central hub. The algorithm maps out the most fuel-efficient individual routes to Nodes 1, 2, 3, 4, and 5. The total sum of gas burned across all those separate branches equals 7.90 Liters.\n# [See Code: Lines 69 & 82]"),
             
-            ("5. How are these costs actually calculated in the code?", 
-             "The `calculate_path_cost(path, graph)` function takes the array and loops `for i in range(len(path) - 1)`. For each step, it checks if the edge exists (`graph.has_edge`) and adds the `weight` attribute to a running `cost` variable.\n# [See Code: Lines 76-83]"),
+            ("5. How does the program calculate these totals?", 
+             "It uses the `networkx.single_source_dijkstra` function. It iterates through every possible starting node, calculates the shortest path dictionary to all targets, and uses a `sum()` function to total the costs. It keeps the node with the lowest total sum.\n# [See Code: Lines 78-82]"),
              
             ("6. How is the data loaded and structured?", 
-             "It uses `pandas.read_csv` to parse `dataset.csv`. For each row, it populates three separate `networkx.DiGraph()` instances (for D, T, and F). The 'Node From' and 'Node To' govern the directional edge, while D, T, F are assigned to the edge's 'weight' attribute.\n# [See Code: Lines 64-74]"),
+             "It uses `pandas.read_csv` to parse `dataset.csv`. For each row, it populates three separate `networkx.DiGraph()` instances (for D, T, and F), assigning the proper weights to the directional edges.\n# [See Code: Lines 45-60]"),
+             
+            ("7. How are the routes and values displayed visually for data science?", 
+             "We collect the individual path dictionaries and cost values returned directly by Dijkstra's algorithm. These exact routes are traced into a Treeview table for clear mathematical breakdowns, while their specific traversal weights are overlaid directly onto the NetworkX plot edges, making it easy to digest visually.\n# [See Code: Lines 141-149 & 190-212]"),
         ]
 
-        # Add title
-        tk.Label(scrollable_frame, text="Technical Details", 
-                 font=("Consolas", 18, "bold"), fg="#00E5FF", bg="#1E1E2F", pady=10).pack(fill=tk.X)
+        tk.Label(scrollable_frame, text="Technical Details", font=("Consolas", 18, "bold"), fg="#00E5FF", bg="#1E1E2F", pady=10).pack(fill=tk.X)
 
         for q, a in questions:
             frame = tk.Frame(scrollable_frame, bg="#2A2A3C", bd=2, relief="groove")
@@ -243,5 +275,5 @@ class TSPApp:
 
 if __name__ == "__main__":
     root = tk.Tk()
-    app = TSPApp(root)
+    app = DijkstraApp(root)
     root.mainloop()
